@@ -11,6 +11,9 @@ const commands = require("../config/commands");
 const { TOKEN } = parseJson(readFile("../config/auth.json")) as AuthJson;
 const { DATA_DIR, CLIENT_ID, EMOJI_NAME, OWNER_ID } = parseJson(readFile("../config/config.json")) as ConfigJson;
 
+const storage = new Storage("data.json");
+let truthers: string[];
+
 // Note: All developers must add an empty data/ directory at root
 Storage.validateDataDir(DATA_DIR);
 
@@ -31,7 +34,7 @@ const SO_TRUE_MAGIC_INT = rand(SO_TRUE_MAX_INT);
 
 /* Handle bot events */
 
-client.on("ready", () => {
+client.on("ready", async () => {
     if (client.user) {
         console.log(`Logged in as ${client.user.tag}!`);
         console.log("------");
@@ -41,6 +44,7 @@ client.on("ready", () => {
         console.warn("Clearing any existing global application (/) commands.");
         client.application.commands.set([]);
     }
+    truthers = storage.read();
 });
 
 client.on("guildCreate", async (guild) => {
@@ -63,7 +67,7 @@ client.on("guildDelete", (guild) => {
 // On new guild member, send bot welcome message to system channel 
 client.on("messageCreate", async (message) => {
     // If message created by self, ignore
-    if (message.author === client.user) {
+    if (message.author.id === client.user?.id) {
         return;
     }
     // If message includes the legacy !sotrue command, send out a "so true"
@@ -112,6 +116,33 @@ client.on("interactionCreate", async (interaction: Interaction) => {
             return;
         }
         await interaction.reply(`${truthsayer.user} so true`);
+    }
+
+    if (interaction.commandName === "sofuckintrue" || interaction.commandName === "sft") {
+        if (interaction.user.id !== OWNER_ID) {
+            await interaction.reply(":no_entry_sign: Access Denied :no_entry_sign:");
+            return;
+        }
+        const truthsayer = interaction.options.getMentionable("truthsayer") as GuildMember | undefined;
+        if (!truthsayer) {
+            await interaction.reply("so fuckin' true");
+            return;
+        }
+        await interaction.reply(`${truthsayer.user} so fuckin' true`);
+    }
+
+    if (interaction.commandName === "truther") {
+        if (interaction.user.id !== OWNER_ID) {
+            await interaction.reply(":no_entry_sign: Access Denied :no_entry_sign:");
+            return;
+        }
+        const truther = interaction.options.getMentionable("truther") as GuildMember;
+        if (truthers.includes(truther.user.id)) {
+            await interaction.reply(`${truther.user} is already a truther!`);
+            return;
+        }
+        storage.add(truther.user.id);
+        await interaction.reply(`${truther.user} appointed!`);
     }
 });
 
