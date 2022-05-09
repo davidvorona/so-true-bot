@@ -1,13 +1,13 @@
-# patronizor-bot
+# so-true-bot
 
-A Discord bot that treats people as they should be treated.
+So True.
 
 ## Setup
 
 1. Clone the app locally
 
 ```
-git clone https://github.com/davidvorona/patronizor-bot.git
+git clone https://github.com/davidvorona/so-true-bot.git
 ```
 
 2. Install `npm` packages
