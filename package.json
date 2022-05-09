@@ -1,7 +1,7 @@
 {
-  "name": "patronizor-bot",
+  "name": "so-true-bot",
   "version": "1.0.0",
-  "description": "Discord bot for treating others how you'd want them to be treated.",
+  "description": "So true.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
