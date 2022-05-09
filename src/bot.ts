@@ -119,7 +119,7 @@ client.on("interactionCreate", async (interaction: Interaction) => {
     }
 
     if (interaction.commandName === "sofuckintrue" || interaction.commandName === "sft") {
-        if (interaction.user.id !== OWNER_ID) {
+        if (interaction.user.id !== OWNER_ID && !truthers.has(interaction.user.id)) {
             await interaction.reply(":no_entry_sign: Access Denied :no_entry_sign:");
             return;
         }
