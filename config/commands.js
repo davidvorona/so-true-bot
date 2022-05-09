@@ -48,11 +48,15 @@ module.exports = [
     },
     {
         name: "truther",
-        description: "Appoint someone who is so true to truther.",
+        description: "Appoint or impeach someone who is just so true.",
         options: [{
             type: ApplicationCommandOptionType.Mentionable,
             name: "truther",
             description: "Who is worthy of being a truther?",
         }]
+    },
+    {
+        name: "truthers",
+        description: "Get a list of currently appointed truthers.",
     }
 ];

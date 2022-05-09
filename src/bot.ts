@@ -1,4 +1,4 @@
-import { Client, Intents, Interaction, GuildMember } from "discord.js";
+import { Client, Intents, Interaction, GuildMember, MessageEmbed } from "discord.js";
 import { AuthJson, ConfigJson } from "./types";
 import Storage from "./storage";
 import TrutherManager from "./truthers";
@@ -138,11 +138,32 @@ client.on("interactionCreate", async (interaction: Interaction) => {
         }
         const truther = interaction.options.getMentionable("truther") as GuildMember;
         if (truthers.has(truther.user.id)) {
-            await interaction.reply(`${truther.user} is already a truther!`);
+            truthers.remove(truther.user.id);
+            await interaction.reply(`${truther.user} impeached!`);
+        } else {
+            truthers.add(truther.user.id);
+            await interaction.reply(`${truther.user} appointed!`);
+        }
+    }
+
+    if (interaction.commandName === "truthers") {
+        if (interaction.user.id !== OWNER_ID) {
+            await interaction.reply(":no_entry_sign: Access Denied :no_entry_sign:");
             return;
         }
-        truthers.add(truther.user.id);
-        await interaction.reply(`${truther.user} appointed!`);
+        const members = await interaction.guild?.members.fetch();
+        const trusers = members?.filter(m => truthers.has(m.user.id));
+        if (!trusers || !trusers.size) {
+            await interaction.reply({ content: "There are no appointed truthers.", ephemeral: true });
+            return;
+        }
+        let num = 1;
+        const list = trusers.reduce((acc, curr) => `${acc}\n**${num++}.** ${curr.displayName}`, "");
+        const embed = new MessageEmbed()
+            .setColor("#0099ff")
+            .setTitle("Truthers")
+            .setDescription(list);
+        await interaction.reply({ embeds: [embed], ephemeral: true });
     }
 });
 

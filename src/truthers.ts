@@ -19,6 +19,13 @@ export default class TrutherManager {
         }
     }
 
+    remove(userId: string) {
+        this.truthers = this.truthers.filter(t => t !== userId);
+        if (this.storage) {
+            this.storage.write(this.truthers);
+        }
+    }
+
     has(userId: string): boolean {
         return this.truthers.includes(userId);
     }
