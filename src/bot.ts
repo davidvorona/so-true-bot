@@ -1,8 +1,9 @@
 import { Client, Intents, Interaction, GuildMember } from "discord.js";
 import { AuthJson, ConfigJson } from "./types";
 import Storage from "./storage";
-import { readFile, parseJson, rand } from "./util";
-import { DEFAULT_EMOJI_NAME, SO_TRUE_CMD, SO_TRUE_MAX_INT } from "./constants";
+import TrutherManager from "./truthers";
+import { readFile, parseJson, rand, determineSoTruthiness } from "./util";
+import { DEFAULT_EMOJI_NAME, SO_TRUE_CMD } from "./constants";
 import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/v9";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -11,11 +12,13 @@ const commands = require("../config/commands");
 const { TOKEN } = parseJson(readFile("../config/auth.json")) as AuthJson;
 const { DATA_DIR, CLIENT_ID, EMOJI_NAME, OWNER_ID } = parseJson(readFile("../config/config.json")) as ConfigJson;
 
-const storage = new Storage("data.json");
-let truthers: string[];
-
 // Note: All developers must add an empty data/ directory at root
 Storage.validateDataDir(DATA_DIR);
+
+const storage = new Storage("data.json");
+
+const storedTruthers = storage.read();
+const truthers = new TrutherManager(storedTruthers, storage);
 
 const rest = new REST({ version: "9" }).setToken(TOKEN);
 
@@ -29,9 +32,6 @@ const client = new Client({
 
 const SO_TRUE_EMOJI = EMOJI_NAME || DEFAULT_EMOJI_NAME;
 
-const SO_TRUE_MAGIC_INT = rand(SO_TRUE_MAX_INT);
-
-
 /* Handle bot events */
 
 client.on("ready", async () => {
@@ -44,7 +44,6 @@ client.on("ready", async () => {
         console.warn("Clearing any existing global application (/) commands.");
         client.application.commands.set([]);
     }
-    truthers = storage.read();
 });
 
 client.on("guildCreate", async (guild) => {
@@ -76,11 +75,12 @@ client.on("messageCreate", async (message) => {
         return;
     }
     // Otherwise, if it hits the magic number, respond with a "so true"!
-    const randomInt = rand(SO_TRUE_MAX_INT);
-    if (randomInt === SO_TRUE_MAGIC_INT) {
+    const isTruther = truthers.has(message.author.id);
+    const isSoTrue = determineSoTruthiness(message.author.id, message.cleanContent, isTruther);
+    if (isSoTrue) {
         const numActions = 4;
         const action = rand(numActions - 1);
-        const soTrueEmoji = message.guild?.emojis.cache.get(SO_TRUE_EMOJI);
+        const soTrueEmoji = message.guild?.emojis.cache.find(e => e.name === SO_TRUE_EMOJI);
         const soTrueEmojis = ["🇸", "🇴", "🇹", "🇷", "🇺", "🇪"];
         if (action === 0) {
             await message.reply("so true");
@@ -137,11 +137,11 @@ client.on("interactionCreate", async (interaction: Interaction) => {
             return;
         }
         const truther = interaction.options.getMentionable("truther") as GuildMember;
-        if (truthers.includes(truther.user.id)) {
+        if (truthers.has(truther.user.id)) {
             await interaction.reply(`${truther.user} is already a truther!`);
             return;
         }
-        storage.add(truther.user.id);
+        truthers.add(truther.user.id);
         await interaction.reply(`${truther.user} appointed!`);
     }
 });

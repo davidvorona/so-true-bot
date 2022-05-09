@@ -1,6 +1,7 @@
 import { Client, AnyChannel, Guild, GuildMember } from "discord.js";
 import * as fs from "fs";
 import path from "path";
+import { SO_TRUE_MAX_INT } from "./constants";
 
 /**
  * Reads the file at the provided file path and returns stringified data.
@@ -48,4 +49,30 @@ export const getChannel = (container: Guild | Client | GuildMember, channelId: s
         return container.guild.channels.cache.get(channelId);
     }
     return container.channels.cache.get(channelId);
+};
+
+const topicsOfInherentSoTruthiness = [
+    "sotrue",
+    "flatearth",
+];
+
+export const determineSoTruthiness = (userId: string, content: string, isTruther: boolean): boolean => {
+    // In dev mode, so true statements are very common (because I am the dev)
+    if (process.env.DEV_MODE) {
+        return rand(2) === rand(2);
+    }
+    let soTrueMaxInt = SO_TRUE_MAX_INT;
+    // If sayer is a truther, double the odds
+    if (isTruther) {
+        soTrueMaxInt /= 2;
+    }
+    // Converts content to lower case and removes all spaces
+    const contentString = content.toLowerCase().replace(/\s+/g, "");
+    // If topics or concepts of inherent so-truthiness are discussed, double the odds
+    const isContentSoTrue = topicsOfInherentSoTruthiness.some(topic => contentString.includes(topic));
+    if (isContentSoTrue) {
+        soTrueMaxInt /= 2;
+    }
+    // THE RESULT OF THE SO TRUTHINESS TEST 
+    return rand(soTrueMaxInt) === rand(soTrueMaxInt);
 };
