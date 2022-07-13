@@ -47,7 +47,7 @@ client.on("ready", async () => {
     }
     // In case new commands have been added, refresh for all existing guilds
     await Promise.all(client.guilds.cache.map(async (guild) => {
-        console.log(`Refreshing commands for guild: ${guild.id}.`);
+        console.log(`Refreshing commands for guild: ${guild.id}`);
         await rest.put(
             Routes.applicationGuildCommands(CLIENT_ID, guild.id),
             { body: commands }
@@ -70,7 +70,7 @@ client.on("guildCreate", async (guild) => {
 });
 
 client.on("guildDelete", (guild) => {
-    console.log(`Bot removed from guild: ${guild.id}.`);
+    console.log(`Bot removed from guild: ${guild.id}`);
 });
 
 // On new guild member, send bot welcome message to system channel 
@@ -188,10 +188,10 @@ client.on("interactionCreate", async (interaction: Interaction) => {
         const falser = interaction.options.getMentionable("falser") as GuildMember;
         if (falsers.has(falser.user.id)) {
             falsers.remove(falser.user.id);
-            await interaction.reply(`${falser.user} divested of truth!`);
+            await interaction.reply(`${falser.user} reinstated in truth!`);
         } else {
             falsers.add(falser.user.id);
-            await interaction.reply(`${falser.user} reinstated in truth!`);
+            await interaction.reply(`${falser.user} divested of truth!`);
         }
     }
 
