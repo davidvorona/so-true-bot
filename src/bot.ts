@@ -47,6 +47,7 @@ client.on("ready", async () => {
     }
     // In case new commands have been added, refresh for all existing guilds
     await Promise.all(client.guilds.cache.map(async (guild) => {
+        console.log(`Refreshing commands for guild: ${guild.id}.`);
         await rest.put(
             Routes.applicationGuildCommands(CLIENT_ID, guild.id),
             { body: commands }
