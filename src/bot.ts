@@ -120,6 +120,10 @@ client.on("interactionCreate", async (interaction: Interaction) => {
     }
 
     if (interaction.commandName === "sotrue" || interaction.commandName === "st") {
+        if (falsers.has(interaction.user.id)) {
+            await interaction.reply("Truth-abuser! You must earn the right to so true...");
+            return;
+        }
         const truthsayer = interaction.options.getMentionable("truthsayer") as GuildMember | undefined;
         if (!truthsayer) {
             await interaction.reply("so true");
