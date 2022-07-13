@@ -19,6 +19,7 @@ const storage = new Storage("data.json");
 
 const storedTruthers = storage.read();
 const truthers = new TrutherManager(storedTruthers, storage);
+const falsers = new TrutherManager();
 
 const rest = new REST({ version: "9" }).setToken(TOKEN);
 
@@ -44,6 +45,14 @@ client.on("ready", async () => {
         console.warn("Clearing any existing global application (/) commands.");
         client.application.commands.set([]);
     }
+    // In case new commands have been added, refresh for all existing guilds
+    await Promise.all(client.guilds.cache.map(async (guild) => {
+        await rest.put(
+            Routes.applicationGuildCommands(CLIENT_ID, guild.id),
+            { body: commands }
+        );
+    }));
+    
 });
 
 client.on("guildCreate", async (guild) => {
@@ -152,16 +161,51 @@ client.on("interactionCreate", async (interaction: Interaction) => {
             return;
         }
         const members = await interaction.guild?.members.fetch();
-        const trusers = members?.filter(m => truthers.has(m.user.id));
-        if (!trusers || !trusers.size) {
+        const trutherMembers = members?.filter(m => truthers.has(m.user.id));
+        if (!trutherMembers || !trutherMembers.size) {
             await interaction.reply({ content: "There are no appointed truthers.", ephemeral: true });
             return;
         }
         let num = 1;
-        const list = trusers.reduce((acc, curr) => `${acc}\n**${num++}.** ${curr.displayName}`, "");
+        const list = trutherMembers.reduce((acc, curr) => `${acc}\n**${num++}.** ${curr.displayName}`, "");
         const embed = new MessageEmbed()
             .setColor("#0099ff")
             .setTitle("Truthers")
+            .setDescription(list);
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    if (interaction.commandName === "falser") {
+        if (interaction.user.id !== OWNER_ID) {
+            await interaction.reply(":no_entry_sign: Access Denied :no_entry_sign:");
+            return;
+        }
+        const falser = interaction.options.getMentionable("falser") as GuildMember;
+        if (falsers.has(falser.user.id)) {
+            falsers.remove(falser.user.id);
+            await interaction.reply(`${falser.user} divested of truth!`);
+        } else {
+            falsers.add(falser.user.id);
+            await interaction.reply(`${falser.user} reinstated in truth!`);
+        }
+    }
+
+    if (interaction.commandName === "falsers") {
+        if (interaction.user.id !== OWNER_ID) {
+            await interaction.reply(":no_entry_sign: Access Denied :no_entry_sign:");
+            return;
+        }
+        const members = await interaction.guild?.members.fetch();
+        const falserMembers = members?.filter(m => falsers.has(m.user.id));
+        if (!falserMembers || !falserMembers.size) {
+            await interaction.reply({ content: "There are no appointed falsers.", ephemeral: true });
+            return;
+        }
+        let num = 1;
+        const list = falserMembers.reduce((acc, curr) => `${acc}\n**${num++}.** ${curr.displayName}`, "");
+        const embed = new MessageEmbed()
+            .setColor("#0099ff")
+            .setTitle("Falsers")
             .setDescription(list);
         await interaction.reply({ embeds: [embed], ephemeral: true });
     }

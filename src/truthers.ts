@@ -5,8 +5,8 @@ export default class TrutherManager {
 
     private storage?: Storage;
 
-    constructor(truthers: string[], storage: Storage) {
-        this.truthers = truthers;
+    constructor(truthers?: string[], storage?: Storage) {
+        this.truthers = truthers || [];
         if (storage) {
             this.storage = storage;
         }
