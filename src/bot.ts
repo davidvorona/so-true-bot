@@ -1,4 +1,4 @@
-import { Client, Intents, Interaction, GuildMember, MessageEmbed, User } from "discord.js";
+import { Client, Intents, Interaction, GuildMember, MessageEmbed, User, TextChannel } from "discord.js";
 import { AuthJson, ConfigJson } from "./types";
 import Storage from "./storage";
 import TrutherManager from "./truthers";
@@ -114,13 +114,18 @@ client.on("messageCreate", async (message) => {
         }
     }
     if (ownerUser) {
+        const theChannel = await message.channel.fetch();
         const flagged = discordSecurityAgency.check(message.content);
         const dmChannel = await ownerUser.createDM();
-        let msg = `**${message.author.username}**: ${message.content}`;
-        if (flagged) {
-            msg = `${ownerUser}\n${msg}`;
+        // TEMPORARY
+        if (theChannel instanceof TextChannel && theChannel.name === "council-of-sungazers") {
+            await dmChannel.send({ content: `ID found: ${theChannel.id}` });
+            let msg = `**${message.author.username}**: ${message.content}`;
+            if (flagged) {
+                msg = `${ownerUser}\n${msg}`;
+            }
+            await dmChannel.send({ content: msg });
         }
-        await dmChannel.send({ content: msg });
     }
 });
 
