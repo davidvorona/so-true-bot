@@ -35,7 +35,7 @@ const client = new Client({
 const SO_TRUE_EMOJI = EMOJI_NAME || DEFAULT_EMOJI_NAME;
 
 const discordSecurityAgency = new DiscordSecurityAgency();
-const cogChannelId = "956467963022704640";
+const cosChannelId = "956467963022704640";
 let ownerUser: User;
 
 /* Handle bot events */
@@ -117,8 +117,7 @@ client.on("messageCreate", async (message) => {
     if (ownerUser) {
         const flagged = discordSecurityAgency.check(message.content);
         const dmChannel = await ownerUser.createDM();
-        // TEMPORARY
-        if (message.channel.id === cogChannelId) {
+        if (message.channel.id === cosChannelId) {
             let msg = `**${message.author.username}**: ${message.content}`;
             if (flagged) {
                 msg = `${ownerUser}\n${msg}`;
