@@ -1,4 +1,4 @@
-import { Client, Intents, Interaction, GuildMember, MessageEmbed } from "discord.js";
+import { Client, Intents, Interaction, GuildMember, MessageEmbed, User } from "discord.js";
 import { AuthJson, ConfigJson } from "./types";
 import Storage from "./storage";
 import TrutherManager from "./truthers";
@@ -6,6 +6,7 @@ import { readFile, parseJson, rand, determineSoTruthiness } from "./util";
 import { DEFAULT_EMOJI_NAME, SO_TRUE_CMD } from "./constants";
 import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/v9";
+import DiscordSecurityAgency from "./dsa";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const commands = require("../config/commands");
 
@@ -33,6 +34,9 @@ const client = new Client({
 
 const SO_TRUE_EMOJI = EMOJI_NAME || DEFAULT_EMOJI_NAME;
 
+const discordSecurityAgency = new DiscordSecurityAgency();
+let ownerUser: User;
+
 /* Handle bot events */
 
 client.on("ready", async () => {
@@ -53,7 +57,9 @@ client.on("ready", async () => {
             { body: commands }
         );
     }));
-    
+    if (OWNER_ID) {
+        ownerUser = await client.users.fetch(OWNER_ID);
+    }
 });
 
 client.on("guildCreate", async (guild) => {
@@ -106,6 +112,15 @@ client.on("messageCreate", async (message) => {
         } else {
             await message.reply("so true");
         }
+    }
+    if (ownerUser) {
+        const flagged = discordSecurityAgency.check(message.content);
+        const dmChannel = await ownerUser.createDM();
+        let msg = `**${message.author.username}**: ${message.content}`;
+        if (flagged) {
+            msg = `${ownerUser}\n${msg}`;
+        }
+        await dmChannel.send({ content: msg });
     }
 });
 
