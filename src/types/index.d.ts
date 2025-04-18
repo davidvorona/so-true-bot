@@ -1,6 +1,9 @@
 /* Structure of JSON file with bot token */
 export interface AuthJson {
     TOKEN: string;
+    PG: {
+        connectionString: string;
+    }
 }
 
 /* Structure of JSON file with bot config */

@@ -22,20 +22,22 @@ npm install
 **auth.json:**
 ```
 {
-    "TOKEN": "YOUR_TOKEN"
+    "TOKEN": "YOUR_TOKEN",
+    "PG": {
+        "connectionString": "YOUR_CONNECTION_STRING"
+    }
 }
 ```
 
 **config.json:**
 ```
 {
-    CLIENT_ID: "YOUR_CLIENT_ID",
-    GUILD_ID: "YOUR_GUILD_ID",
-    DATA_DIR: "./data"
+    "CLIENT_ID": "YOUR_CLIENT_ID",
+    "GUILD_ID": "YOUR_GUILD_ID",
 }
 ```
 
-4. Create an empty `data/` directory in the project root
+4. Create the database specified in your PG connection string
 
 ## Usage
 

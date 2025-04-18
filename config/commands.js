@@ -58,18 +58,5 @@ module.exports = [
     {
         name: "truthers",
         description: "Get a list of currently appointed truthers.",
-    },
-    {
-        name: "falser",
-        description: "Strike down or reinstate someone who has abused truth.",
-        options: [{
-            type: ApplicationCommandOptionType.Mentionable,
-            name: "falser",
-            description: "Who must be divested of truth?",
-        }]
-    },
-    {
-        name: "falsers",
-        description: "Get a list of those currently divested of truth."
     }
 ];

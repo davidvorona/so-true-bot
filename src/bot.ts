@@ -1,26 +1,22 @@
-import { Client, Intents, Interaction, GuildMember, MessageEmbed, User } from "discord.js";
+import { Client, Intents, Interaction, GuildMember, MessageEmbed, User, TextChannel } from "discord.js";
 import { AuthJson, ConfigJson } from "./types";
-import Storage from "./storage";
-import TrutherManager from "./truthers";
 import { readFile, parseJson, rand, determineSoTruthiness } from "./util";
 import { DEFAULT_EMOJI_NAME, SO_TRUE_CMD } from "./constants";
+import PGStorageClient from "./pg";
 import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/v9";
 import DiscordSecurityAgency from "./dsa";
+import State from "./state";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const commands = require("../config/commands");
 
-const { TOKEN } = parseJson(readFile("../config/auth.json")) as AuthJson;
-const { DATA_DIR, CLIENT_ID, EMOJI_NAME, OWNER_ID } = parseJson(readFile("../config/config.json")) as ConfigJson;
+const { TOKEN, PG } = parseJson(readFile("../config/auth.json")) as AuthJson;
+const { CLIENT_ID, EMOJI_NAME, OWNER_ID } = parseJson(readFile("../config/config.json")) as ConfigJson;
 
-// Note: All developers must add an empty data/ directory at root
-Storage.validateDataDir(DATA_DIR);
+// Export global PG storage client singleton
+const pgStorageClient: PGStorageClient = new PGStorageClient(PG);
 
-const storage = new Storage("data.json");
-
-const storedTruthers = storage.read();
-const truthers = new TrutherManager(storedTruthers, storage);
-const falsers = new TrutherManager();
+const state = new State();
 
 const rest = new REST({ version: "9" }).setToken(TOKEN);
 
@@ -35,31 +31,47 @@ const client = new Client({
 const SO_TRUE_EMOJI = EMOJI_NAME || DEFAULT_EMOJI_NAME;
 
 const discordSecurityAgency = new DiscordSecurityAgency();
+// Hardcoded channel ID for the Council of Sungazers
 const cosChannelId = "956467963022704640";
 let ownerUser: User;
 
 /* Handle bot events */
 
 client.on("ready", async () => {
-    if (client.user) {
-        console.log(`Logged in as ${client.user.tag}!`);
-        console.log("------");
-    }
-    // For now, make sure global commands are cleared if any found
-    if (client.application) {
-        console.warn("Clearing any existing global application (/) commands.");
-        client.application.commands.set([]);
-    }
-    // In case new commands have been added, refresh for all existing guilds
-    await Promise.all(client.guilds.cache.map(async (guild) => {
-        console.log(`Refreshing commands for guild: ${guild.id}`);
-        await rest.put(
-            Routes.applicationGuildCommands(CLIENT_ID, guild.id),
-            { body: commands }
-        );
-    }));
-    if (OWNER_ID) {
-        ownerUser = await client.users.fetch(OWNER_ID);
+    try {
+        if (client.user) {
+            console.log(`Logged in as ${client.user.tag}!`);
+            console.log("------");
+        }
+        // For now, make sure global commands are cleared if any found
+        if (client.application) {
+            console.warn("Clearing any existing global application (/) commands.");
+            client.application.commands.set([]);
+        }
+        // In case new commands have been added, refresh for all existing guilds
+        await Promise.all(client.guilds.cache.map(async (guild) => {
+            console.log(`Refreshing commands for guild: ${guild.id}`);
+            await rest.put(
+                Routes.applicationGuildCommands(CLIENT_ID, guild.id),
+                { body: commands }
+            );
+        }));
+        if (OWNER_ID) {
+            ownerUser = await client.users.fetch(OWNER_ID);
+        }
+        // Attempt to initialize the PG client
+        await pgStorageClient.connect();
+
+        // Ensure all necessary tables exist, initialize those that don't
+        await pgStorageClient.initializeTables();
+
+        // Hydrate state with existing users
+        const users = await pgStorageClient.fetchUsers();
+        state.setUsers(Object.keys(users));
+        const truthers = Object.keys(users).filter((userId) => users[userId].truther);
+        state.setTruthers(truthers);
+    } catch (err) {
+        console.error(err);
     }
 });
 
@@ -82,48 +94,66 @@ client.on("guildDelete", (guild) => {
 
 // On new guild member, send bot welcome message to system channel 
 client.on("messageCreate", async (message) => {
-    // If message created by self, ignore
-    if (message.author.id === client.user?.id) {
-        return;
-    }
-    // If message includes the legacy !sotrue command, send out a "so true"
-    if (message.content.includes(SO_TRUE_CMD)) {
-        await message.channel.send("so true");
-        return;
-    }
-    // Otherwise, if it hits the magic number, respond with a "so true"!
-    const isTruther = truthers.has(message.author.id);
-    const isSoTrue = determineSoTruthiness(message.author.id, message.cleanContent, isTruther);
-    if (isSoTrue) {
-        const numActions = 4;
-        const action = rand(numActions - 1);
-        const soTrueEmoji = message.guild?.emojis.cache.find(e => e.name === SO_TRUE_EMOJI);
-        const soTrueEmojis = ["🇸", "🇴", "🇹", "🇷", "🇺", "🇪"];
-        if (action === 0) {
-            await message.reply("so true");
-        } else if (action === 1 && soTrueEmoji) {
-            await message.react(soTrueEmoji);
-        } else if (action === 2) {
-            soTrueEmojis.forEach(async (letter) => {
-                await message.react(letter);
-            });
-        } else if (action === 3) {
-            const soTrueEmojiText = soTrueEmojis.join(" ");
-            await message.reply(soTrueEmojiText);
-        } else {
-            await message.reply("so true");
+    try {
+        // If message created by self, ignore
+        if (message.author.id === client.user?.id) {
+            return;
         }
-    }
-    if (ownerUser) {
-        const flagged = discordSecurityAgency.check(message.content);
-        const dmChannel = await ownerUser.createDM();
-        if (message.channel.id === cosChannelId) {
-            let msg = `**${message.author.username}**: ${message.content}`;
-            if (flagged) {
-                msg = `${ownerUser}\n${msg}`;
+        // If message includes the legacy !sotrue command, send out a "so true"
+        if (message.content.includes(SO_TRUE_CMD)) {
+            await message.channel.send("so true");
+            return;
+        }
+        // Otherwise, if it hits the magic number, respond with a "so true"!
+        const isTruther = state.isTruther(message.author.id);
+        const isSoTrue = determineSoTruthiness(message.author.id, message.cleanContent, isTruther);
+        if (isSoTrue) {
+            const numActions = 4;
+            const action = rand(numActions - 1);
+            const soTrueEmoji = message.guild?.emojis.cache.find(e => e.name === SO_TRUE_EMOJI);
+            const soTrueEmojis = ["🇸", "🇴", "🇹", "🇷", "🇺", "🇪"];
+            if (action === 0) {
+                await message.reply("so true");
+            } else if (action === 1 && soTrueEmoji) {
+                await message.react(soTrueEmoji);
+            } else if (action === 2) {
+                soTrueEmojis.forEach(async (letter) => {
+                    await message.react(letter);
+                });
+            } else if (action === 3) {
+                const soTrueEmojiText = soTrueEmojis.join(" ");
+                await message.reply(soTrueEmojiText);
+            } else {
+                await message.reply("so true");
             }
-            await dmChannel.send({ content: msg });
         }
+        
+        if (!state.hasUser(message.author.id)) {
+            await pgStorageClient.writeUser(message.author.id, message.author.username);
+            state.addUser(message.author.id);
+        }
+        if (!state.hasChannel(message.channel.id)) {
+            const channel = await client.channels.fetch(message.channel.id) as TextChannel;
+            await pgStorageClient.writeChannel(message.channel.id, channel.name);
+            state.addChannel(message.channel.id);
+        }
+
+        await pgStorageClient.writeMessage(message.id, message.channel.id, message.author.id, message.content);
+        await pgStorageClient.incrementUserMessageCount(message.author.id);
+        
+        if (ownerUser) {
+            const flagged = discordSecurityAgency.check(message.content);
+            const dmChannel = await ownerUser.createDM();
+            if (message.channel.id === cosChannelId) {
+                let msg = `**${message.author.username}**: ${message.content}`;
+                if (flagged) {
+                    msg = `${ownerUser}\n${msg}`;
+                }
+                await dmChannel.send({ content: msg });
+            }
+        }
+    } catch (err) {
+        console.error(err);
     }
 });
 
@@ -131,109 +161,73 @@ client.on("messageCreate", async (message) => {
 
 // Handle command interactions
 client.on("interactionCreate", async (interaction: Interaction) => {
-    if (!interaction.isCommand()) return;
+    try {
+        if (!interaction.isCommand()) return;
 
-    if (interaction.commandName === "ping") {
-        await interaction.reply("pong!");
-    }
+        if (interaction.commandName === "ping") {
+            await interaction.reply("pong!");
+        }
 
-    if (interaction.commandName === "sotrue" || interaction.commandName === "st") {
-        if (falsers.has(interaction.user.id)) {
-            await interaction.reply({
-                content: "Truth-abuser! You must earn the right to so true...",
-                ephemeral: true
-            });
-            return;
+        if (interaction.commandName === "sotrue" || interaction.commandName === "st") {
+            const truthsayer = interaction.options.getMentionable("truthsayer") as GuildMember | undefined;
+            if (!truthsayer) {
+                await interaction.reply("so true");
+                return;
+            }
+            await interaction.reply(`${truthsayer.user} so true`);
         }
-        const truthsayer = interaction.options.getMentionable("truthsayer") as GuildMember | undefined;
-        if (!truthsayer) {
-            await interaction.reply("so true");
-            return;
-        }
-        await interaction.reply(`${truthsayer.user} so true`);
-    }
 
-    if (interaction.commandName === "sofuckintrue" || interaction.commandName === "sft") {
-        if (interaction.user.id !== OWNER_ID && !truthers.has(interaction.user.id)) {
-            await interaction.reply(":no_entry_sign: Access Denied :no_entry_sign:");
-            return;
+        if (interaction.commandName === "sofuckintrue" || interaction.commandName === "sft") {
+            if (interaction.user.id !== OWNER_ID && !state.isTruther(interaction.user.id)) {
+                await interaction.reply(":no_entry_sign: Access Denied :no_entry_sign:");
+                return;
+            }
+            const truthsayer = interaction.options.getMentionable("truthsayer") as GuildMember | undefined;
+            if (!truthsayer) {
+                await interaction.reply("so fuckin' true");
+                return;
+            }
+            await interaction.reply(`${truthsayer.user} so fuckin' true`);
         }
-        const truthsayer = interaction.options.getMentionable("truthsayer") as GuildMember | undefined;
-        if (!truthsayer) {
-            await interaction.reply("so fuckin' true");
-            return;
-        }
-        await interaction.reply(`${truthsayer.user} so fuckin' true`);
-    }
 
-    if (interaction.commandName === "truther") {
-        if (interaction.user.id !== OWNER_ID) {
-            await interaction.reply(":no_entry_sign: Access Denied :no_entry_sign:");
-            return;
+        if (interaction.commandName === "truther") {
+            if (interaction.user.id !== OWNER_ID) {
+                await interaction.reply(":no_entry_sign: Access Denied :no_entry_sign:");
+                return;
+            }
+            const truther = interaction.options.getMentionable("truther") as GuildMember;
+            if (state.isTruther(truther.user.id)) {
+                await pgStorageClient.unsetUserTruther(truther.user.id);
+                state.removeTruther(truther.user.id);
+                await interaction.reply(`${truther.user} impeached!`);
+            } else {
+                await pgStorageClient.setUserTruther(truther.user.id);
+                state.addTruther(truther.user.id);
+                await interaction.reply(`${truther.user} appointed!`);
+            }
         }
-        const truther = interaction.options.getMentionable("truther") as GuildMember;
-        if (truthers.has(truther.user.id)) {
-            truthers.remove(truther.user.id);
-            await interaction.reply(`${truther.user} impeached!`);
-        } else {
-            truthers.add(truther.user.id);
-            await interaction.reply(`${truther.user} appointed!`);
-        }
-    }
 
-    if (interaction.commandName === "truthers") {
-        if (interaction.user.id !== OWNER_ID) {
-            await interaction.reply(":no_entry_sign: Access Denied :no_entry_sign:");
-            return;
+        if (interaction.commandName === "truthers") {
+            if (interaction.user.id !== OWNER_ID) {
+                await interaction.reply(":no_entry_sign: Access Denied :no_entry_sign:");
+                return;
+            }
+            const members = await interaction.guild?.members.fetch();
+            const trutherMembers = members?.filter(m => state.isTruther(m.user.id));
+            if (!trutherMembers || !trutherMembers.size) {
+                await interaction.reply({ content: "There are no appointed truthers.", ephemeral: true });
+                return;
+            }
+            let num = 1;
+            const list = trutherMembers.reduce((acc, curr) => `${acc}\n**${num++}.** ${curr.displayName}`, "");
+            const embed = new MessageEmbed()
+                .setColor("#0099ff")
+                .setTitle("Truthers")
+                .setDescription(list);
+            await interaction.reply({ embeds: [embed], ephemeral: true });
         }
-        const members = await interaction.guild?.members.fetch();
-        const trutherMembers = members?.filter(m => truthers.has(m.user.id));
-        if (!trutherMembers || !trutherMembers.size) {
-            await interaction.reply({ content: "There are no appointed truthers.", ephemeral: true });
-            return;
-        }
-        let num = 1;
-        const list = trutherMembers.reduce((acc, curr) => `${acc}\n**${num++}.** ${curr.displayName}`, "");
-        const embed = new MessageEmbed()
-            .setColor("#0099ff")
-            .setTitle("Truthers")
-            .setDescription(list);
-        await interaction.reply({ embeds: [embed], ephemeral: true });
-    }
-
-    if (interaction.commandName === "falser") {
-        if (interaction.user.id !== OWNER_ID) {
-            await interaction.reply(":no_entry_sign: Access Denied :no_entry_sign:");
-            return;
-        }
-        const falser = interaction.options.getMentionable("falser") as GuildMember;
-        if (falsers.has(falser.user.id)) {
-            falsers.remove(falser.user.id);
-            await interaction.reply(`${falser.user} reinstated in truth!`);
-        } else {
-            falsers.add(falser.user.id);
-            await interaction.reply(`${falser.user} divested of truth!`);
-        }
-    }
-
-    if (interaction.commandName === "falsers") {
-        if (interaction.user.id !== OWNER_ID) {
-            await interaction.reply(":no_entry_sign: Access Denied :no_entry_sign:");
-            return;
-        }
-        const members = await interaction.guild?.members.fetch();
-        const falserMembers = members?.filter(m => falsers.has(m.user.id));
-        if (!falserMembers || !falserMembers.size) {
-            await interaction.reply({ content: "There are no appointed falsers.", ephemeral: true });
-            return;
-        }
-        let num = 1;
-        const list = falserMembers.reduce((acc, curr) => `${acc}\n**${num++}.** ${curr.displayName}`, "");
-        const embed = new MessageEmbed()
-            .setColor("#0099ff")
-            .setTitle("Falsers")
-            .setDescription(list);
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+    } catch (err) {
+        console.error(err);
     }
 });
 
