@@ -132,14 +132,16 @@ client.on("messageCreate", async (message) => {
             await pgStorageClient.writeUser(message.author.id, message.author.username);
             state.addUser(message.author.id);
         }
-        if (!state.hasChannel(message.channel.id)) {
-            const channel = await client.channels.fetch(message.channel.id) as TextChannel;
-            await pgStorageClient.writeChannel(message.channel.id, channel.name);
-            state.addChannel(message.channel.id);
-        }
+        if (message.inGuild()) {
+            if (!state.hasChannel(message.channel.id)) {
+                const channel = await client.channels.fetch(message.channel.id) as TextChannel;
+                await pgStorageClient.writeChannel(message.channel.id, message.guildId, channel.name);
+                state.addChannel(message.channel.id);
+            }
 
-        await pgStorageClient.writeMessage(message.id, message.channel.id, message.author.id, message.content);
-        await pgStorageClient.incrementUserMessageCount(message.author.id);
+            await pgStorageClient.writeMessage(message.id, message.guildId, message.channel.id, message.author.id, message.content);
+            await pgStorageClient.incrementUserMessageCount(message.author.id);
+        }
         
         if (ownerUser) {
             const flagged = discordSecurityAgency.check(message.content);
