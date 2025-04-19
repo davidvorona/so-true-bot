@@ -7,7 +7,7 @@ export default class PGStorageClient {
     private static readonly TABLES: Record<TableName, string> = {
         "users": "CREATE TABLE users (id BIGINT PRIMARY KEY, username VARCHAR(32), truther BOOLEAN);",
         "channels": "CREATE TABLE channels (id BIGINT PRIMARY KEY, guild_id BIGINT, name VARCHAR(32));",
-        "messages": "CREATE TABLE messages (id BIGINT PRIMARY KEY, guild_id BIGINT, channel_id BIGINT REFERENCES channels(id), user_id BIGINT REFERENCES users(id), content TEXT);",
+        "messages": "CREATE TABLE messages (id BIGINT PRIMARY KEY, guild_id BIGINT, channel_id BIGINT REFERENCES channels(id), user_id BIGINT REFERENCES users(id), content TEXT, attachment_count SMALLINT, embed_count SMALLINT, created_at TIMESTAMP);",
         "user_statistics": "CREATE TABLE user_statistics (user_id BIGINT PRIMARY KEY REFERENCES users(id), message_count INT DEFAULT 0);"
     };
 
@@ -95,8 +95,8 @@ export default class PGStorageClient {
         await this.client.query("INSERT INTO channels VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET guild_id = EXCLUDED.guild_id, name = EXCLUDED.name;", [id, guildId, name]);
     }
 
-    async writeMessage(id: Snowflake, guildId: Snowflake, channelId: Snowflake, userId: Snowflake, content: string): Promise<void> {
-        await this.client.query("INSERT INTO messages VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET guild_id = EXCLUDED.guild_id, channel_id = EXCLUDED.channel_id, user_id = EXCLUDED.user_id, content = EXCLUDED.content;", [id, guildId, channelId, userId, content]);
+    async writeMessage(id: Snowflake, guildId: Snowflake, channelId: Snowflake, userId: Snowflake, content: string, attachmentCount: number, embedCount: number, createdAt: Date): Promise<void> {
+        await this.client.query("INSERT INTO messages VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO UPDATE SET guild_id = EXCLUDED.guild_id, channel_id = EXCLUDED.channel_id, user_id = EXCLUDED.user_id, content = EXCLUDED.content, attachment_count = EXCLUDED.attachment_count, embed_count = EXCLUDED.embed_count, created_at = EXCLUDED.created_at;", [id, guildId, channelId, userId, content, attachmentCount, embedCount, createdAt]);
     }
 
     async incrementUserMessageCount(userId: Snowflake): Promise<void> {

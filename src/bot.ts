@@ -138,8 +138,16 @@ client.on("messageCreate", async (message) => {
                 await pgStorageClient.writeChannel(message.channel.id, message.guildId, channel.name);
                 state.addChannel(message.channel.id);
             }
-
-            await pgStorageClient.writeMessage(message.id, message.guildId, message.channel.id, message.author.id, message.content);
+            await pgStorageClient.writeMessage(
+                message.id,
+                message.guildId,
+                message.channel.id,
+                message.author.id,
+                message.content,
+                message.attachments.size,
+                message.embeds.length,
+                message.createdAt
+            );
             await pgStorageClient.incrementUserMessageCount(message.author.id);
         }
         
