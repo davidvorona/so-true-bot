@@ -1,22 +1,19 @@
-import { Client, Intents, Interaction, GuildMember, MessageEmbed, User, TextChannel } from "discord.js";
-import { AuthJson, ConfigJson } from "./types";
-import { readFile, parseJson, rand, determineSoTruthiness } from "./util";
-import { DEFAULT_EMOJI_NAME, SO_TRUE_CMD } from "./constants";
-import PGStorageClient from "./pg";
+import { Client, Intents, Interaction, GuildMember, MessageEmbed, User } from "discord.js";
 import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/v9";
+import { AuthJson, ConfigJson } from "./types";
+import { readFile, parseJson, rand } from "./util";
+import { DEFAULT_EMOJI_NAME, SO_TRUE_CMD } from "./constants";
+import pgStorageClient from "./instances/pg";
+import state from "./instances/state";
 import DiscordSecurityAgency from "./dsa";
-import State from "./state";
+import DiscordHistoricalSociety from "./dhs";
+import JudgeOfTruth from "./jot";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const commands = require("../config/commands");
 
-const { TOKEN, PG } = parseJson(readFile("../config/auth.json")) as AuthJson;
+const { TOKEN } = parseJson(readFile("../config/auth.json")) as AuthJson;
 const { CLIENT_ID, EMOJI_NAME, OWNER_ID } = parseJson(readFile("../config/config.json")) as ConfigJson;
-
-// Export global PG storage client singleton
-const pgStorageClient: PGStorageClient = new PGStorageClient(PG);
-
-const state = new State();
 
 const rest = new REST({ version: "9" }).setToken(TOKEN);
 
@@ -30,6 +27,8 @@ const client = new Client({
 
 const SO_TRUE_EMOJI = EMOJI_NAME || DEFAULT_EMOJI_NAME;
 
+const discordHistoricalSociety = new DiscordHistoricalSociety(pgStorageClient, state);
+const judgeOfTruth = new JudgeOfTruth(pgStorageClient, state);
 const discordSecurityAgency = new DiscordSecurityAgency();
 // Hardcoded channel ID for the Council of Sungazers
 const cosChannelId = "956467963022704640";
@@ -56,20 +55,17 @@ client.on("ready", async () => {
                 { body: commands }
             );
         }));
+        // Set the owner user if exists
         if (OWNER_ID) {
             ownerUser = await client.users.fetch(OWNER_ID);
         }
-        // Attempt to initialize the PG client
-        await pgStorageClient.connect();
 
-        // Ensure all necessary tables exist, initialize those that don't
+        // Initialize the database connection and tables
+        await pgStorageClient.connect();
         await pgStorageClient.initializeTables();
 
-        // Hydrate state with existing users
-        const users = await pgStorageClient.fetchUsers();
-        state.setUsers(Object.keys(users));
-        const truthers = Object.keys(users).filter((userId) => users[userId].truther);
-        state.setTruthers(truthers);
+        await discordHistoricalSociety.load();
+        await judgeOfTruth.load();
     } catch (err) {
         console.error(err);
     }
@@ -105,8 +101,7 @@ client.on("messageCreate", async (message) => {
             return;
         }
         // Otherwise, if it hits the magic number, respond with a "so true"!
-        const isTruther = state.isTruther(message.author.id);
-        const isSoTrue = determineSoTruthiness(message.author.id, message.cleanContent, isTruther);
+        const isSoTrue = judgeOfTruth.decide(message.author.id, message.cleanContent);
         if (isSoTrue) {
             const numActions = 4;
             const action = rand(numActions - 1);
@@ -128,17 +123,14 @@ client.on("messageCreate", async (message) => {
             }
         }
         
-        if (!state.hasUser(message.author.id)) {
-            await pgStorageClient.writeUser(message.author.id, message.author.username);
-            state.addUser(message.author.id);
-        }
+        // Record new user to database and state
+        await discordHistoricalSociety.recordUserIfNew(message.author.id, message.author.username);
+        // Record all messages sent in guilds
         if (message.inGuild()) {
-            if (!state.hasChannel(message.channel.id)) {
-                const channel = await client.channels.fetch(message.channel.id) as TextChannel;
-                await pgStorageClient.writeChannel(message.channel.id, message.guildId, channel.name);
-                state.addChannel(message.channel.id);
-            }
-            await pgStorageClient.writeMessage(
+            // If the message channel is new, record it
+            await discordHistoricalSociety.recordChannelIfNew(message.channel.id, message.guildId, message.channel.name);
+            // Record important message data
+            await discordHistoricalSociety.recordMessage(
                 message.id,
                 message.guildId,
                 message.channel.id,
@@ -148,7 +140,6 @@ client.on("messageCreate", async (message) => {
                 message.embeds.length,
                 message.createdAt
             );
-            await pgStorageClient.incrementUserMessageCount(message.author.id);
         }
         
         if (ownerUser) {
@@ -188,7 +179,7 @@ client.on("interactionCreate", async (interaction: Interaction) => {
         }
 
         if (interaction.commandName === "sofuckintrue" || interaction.commandName === "sft") {
-            if (interaction.user.id !== OWNER_ID && !state.isTruther(interaction.user.id)) {
+            if (interaction.user.id !== OWNER_ID && !judgeOfTruth.isTruther(interaction.user.id)) {
                 await interaction.reply(":no_entry_sign: Access Denied :no_entry_sign:");
                 return;
             }
@@ -206,13 +197,11 @@ client.on("interactionCreate", async (interaction: Interaction) => {
                 return;
             }
             const truther = interaction.options.getMentionable("truther") as GuildMember;
-            if (state.isTruther(truther.user.id)) {
-                await pgStorageClient.unsetUserTruther(truther.user.id);
-                state.removeTruther(truther.user.id);
+            if (judgeOfTruth.isTruther(truther.user.id)) {
+                await judgeOfTruth.removeTruther(truther.user.id);
                 await interaction.reply(`${truther.user} impeached!`);
             } else {
-                await pgStorageClient.setUserTruther(truther.user.id);
-                state.addTruther(truther.user.id);
+                await judgeOfTruth.addTruther(truther.user.id);
                 await interaction.reply(`${truther.user} appointed!`);
             }
         }
@@ -223,7 +212,7 @@ client.on("interactionCreate", async (interaction: Interaction) => {
                 return;
             }
             const members = await interaction.guild?.members.fetch();
-            const trutherMembers = members?.filter(m => state.isTruther(m.user.id));
+            const trutherMembers = members?.filter(m => judgeOfTruth.isTruther(m.user.id));
             if (!trutherMembers || !trutherMembers.size) {
                 await interaction.reply({ content: "There are no appointed truthers.", ephemeral: true });
                 return;
