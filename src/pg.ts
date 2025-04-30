@@ -102,4 +102,10 @@ export default class PGStorageClient {
     async incrementUserMessageCount(userId: Snowflake): Promise<void> {
         await this.client.query("INSERT INTO user_statistics (user_id, message_count) VALUES ($1, 1) ON CONFLICT (user_id) DO UPDATE SET message_count = user_statistics.message_count + 1;", [userId]);
     }
+
+    async fetchUserMessages(userId: Snowflake): Promise<{ channel_id: string, content: string, attachment_count: number, embed_count: number, created_at: Date }[]> {
+        const result = await this.client.query<{ content: string, attachment_count: number, embed_count: number, created_at: Date, channel_id: string }>("SELECT content, attachment_count, embed_count, created_at, channel_id FROM messages WHERE user_id = $1;", [userId]);
+        return result.rows;
+    }
+
 }

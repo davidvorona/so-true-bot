@@ -57,4 +57,15 @@ export default class DiscordHistoricalSociety {
         );
         await this._pgStorageClient.incrementUserMessageCount(userId);
     }
+
+    async fetchUserMessages(userId: Snowflake) {
+        const userMessages = await this._pgStorageClient.fetchUserMessages(userId);
+        return userMessages.map((message) => ({
+            content: message.content,
+            attachmentCount: message.attachment_count,
+            embedCount: message.embed_count,
+            createdAt: new Date(message.created_at),
+            channelId: message.channel_id
+        }));
+    }
 }

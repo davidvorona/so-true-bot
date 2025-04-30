@@ -29,7 +29,7 @@ const SO_TRUE_EMOJI = EMOJI_NAME || DEFAULT_EMOJI_NAME;
 
 const discordHistoricalSociety = new DiscordHistoricalSociety(pgStorageClient, state);
 const judgeOfTruth = new JudgeOfTruth(pgStorageClient, state);
-const discordSecurityAgency = new DiscordSecurityAgency();
+let discordSecurityAgency: DiscordSecurityAgency;
 // Hardcoded channel ID for the Council of Sungazers
 const cosChannelId = "956467963022704640";
 let ownerUser: User;
@@ -65,6 +65,7 @@ client.on("ready", async () => {
         await pgStorageClient.initializeTables();
 
         await discordHistoricalSociety.load();
+        discordSecurityAgency = new DiscordSecurityAgency(ownerUser.id);
         await judgeOfTruth.load();
     } catch (err) {
         console.error(err);
@@ -151,6 +152,31 @@ client.on("messageCreate", async (message) => {
                     msg = `${ownerUser}\n${msg}`;
                 }
                 await dmChannel.send({ content: msg });
+            }
+            if (ownerUser.id === message.author.id && client.user && message.mentions.has(client.user)) {
+                console.info("Owner command:", message.content);
+                if (message.content.includes("dsa_user")) {
+                    const mentionedUser = message.mentions.users.find(user => user.id !== client.user?.id);
+                    if (!mentionedUser) {
+                        return;
+                    }
+                    const data = await discordHistoricalSociety.fetchUserMessages(mentionedUser.id);
+                    const results = discordSecurityAgency.prepareUserMessageData(data);
+                    await message.reply({
+                        embeds: [new MessageEmbed()
+                            .setTitle(`DSA User Report: ${mentionedUser.username}`)
+                            .setDescription(`Data recorded since ${results.earliestMessageDate.toDateString()}`)
+                            .setThumbnail(mentionedUser.displayAvatarURL())
+                            .addField("Attachment Count", results.attachmentCount.toString(), true)
+                            .addField("Embed Count", results.embedCount.toString(), true)
+                            .addField("Message Count", results.messageCount.toString(), true)
+                            .addField("Earliest Message Date", results.earliestMessageDate.toString())
+                            .addField("Most Used Word", `${results.mostUsedWord[0]} - used ${results.mostUsedWord[1]} times`)
+                            .addField("Most Messaged Channel", `${results.mostMessagedChannel[0]} - ${results.mostMessagedChannel[1]} total messages`)
+                            .addField("Owner Mention Count", results.ownerMentionCount.toString())
+                        ]
+                    });
+                }
             }
         }
     } catch (err) {
