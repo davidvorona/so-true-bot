@@ -27,6 +27,10 @@ export default class DiscordHistoricalSociety {
         this._state.addUser(userId);
     }
 
+    getUserUsername(userId: Snowflake) {
+        return this._pgStorageClient.fetchUser(userId);
+    }
+
     async recordChannelIfNew(guildId: Snowflake, channelId: Snowflake, channelName: string) {
         if (this._state.hasChannel(guildId)) {
             return;

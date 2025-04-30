@@ -157,24 +157,28 @@ client.on("messageCreate", async (message) => {
                 console.info("Owner command:", message.content);
                 if (message.content.includes("dsa_user")) {
                     const mentionedUser = message.mentions.users.find(user => user.id !== client.user?.id);
-                    if (!mentionedUser) {
-                        return;
-                    }
-                    const data = await discordHistoricalSociety.fetchUserMessages(mentionedUser.id);
+                    const userIdArg = mentionedUser?.id || message.content.split("dsa_user")[1];
+                    const data = await discordHistoricalSociety.fetchUserMessages(userIdArg);
                     const results = discordSecurityAgency.prepareUserMessageData(data);
+                    let userUsername = mentionedUser?.username;
+                    if (!userUsername) {
+                        userUsername = await discordHistoricalSociety.getUserUsername(userIdArg) || undefined;
+                    }
+                    const embed = new MessageEmbed()
+                        .setTitle(`DSA User Report: ${userUsername}`)
+                        .setDescription(`Data recorded since ${results.earliestMessageDate.toDateString()}`)
+                        .addField("Attachment Count", results.attachmentCount.toString(), true)
+                        .addField("Embed Count", results.embedCount.toString(), true)
+                        .addField("Message Count", results.messageCount.toString(), true)
+                        .addField("Earliest Message Date", results.earliestMessageDate.toString())
+                        .addField("Most Used Word", `${results.mostUsedWord[0]} - used ${results.mostUsedWord[1]} times`)
+                        .addField("Most Messaged Channel", `${results.mostMessagedChannel[0]} - ${results.mostMessagedChannel[1]} total messages`)
+                        .addField("Owner Mention Count", results.ownerMentionCount.toString());
+                    if (mentionedUser) {
+                        embed.setThumbnail(mentionedUser.displayAvatarURL());
+                    }
                     await message.reply({
-                        embeds: [new MessageEmbed()
-                            .setTitle(`DSA User Report: ${mentionedUser.username}`)
-                            .setDescription(`Data recorded since ${results.earliestMessageDate.toDateString()}`)
-                            .setThumbnail(mentionedUser.displayAvatarURL())
-                            .addField("Attachment Count", results.attachmentCount.toString(), true)
-                            .addField("Embed Count", results.embedCount.toString(), true)
-                            .addField("Message Count", results.messageCount.toString(), true)
-                            .addField("Earliest Message Date", results.earliestMessageDate.toString())
-                            .addField("Most Used Word", `${results.mostUsedWord[0]} - used ${results.mostUsedWord[1]} times`)
-                            .addField("Most Messaged Channel", `${results.mostMessagedChannel[0]} - ${results.mostMessagedChannel[1]} total messages`)
-                            .addField("Owner Mention Count", results.ownerMentionCount.toString())
-                        ]
+                        embeds: [embed]
                     });
                 }
             }
