@@ -60,7 +60,7 @@ export default class DiscordSecurityAgency {
         const tokenCounts: Record<string, number> = {};
         tokens.forEach((token) => {
             const tkn = token.replace(/[^a-zA-Z0-9\s]/g, "").toLowerCase();
-            if (tokenBlacklist.includes(tkn)) {
+            if (!tkn || tokenBlacklist.includes(tkn)) {
                 return;
             }
             if (!tokenCounts[tkn]) {
