@@ -43,7 +43,8 @@ export default class DiscordSecurityAgency {
                 userData.earliestMessageDate = new Date(createdAt);
             }
             if (content) {
-                tokens.push(...content.split(" "));
+                const messageTkns = content.split(" ");
+                tokens.push(...messageTkns.filter(t => t.length > 0));
             }
             if (!channelCounts[channelId]) {
                 channelCounts[channelId] = 0;
