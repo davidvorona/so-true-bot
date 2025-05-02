@@ -171,9 +171,11 @@ client.on("messageCreate", async (message) => {
                         .addField("Embed Count", results.embedCount.toString(), true)
                         .addField("Message Count", results.messageCount.toString(), true)
                         .addField("Earliest Message Date", results.earliestMessageDate.toString())
-                        .addField("Most Used Word", `${results.mostUsedWord[0]} - used ${results.mostUsedWord[1]} times`)
                         .addField("Most Messaged Channel", `${results.mostMessagedChannel[0]} - ${results.mostMessagedChannel[1]} total messages`)
                         .addField("Owner Mention Count", results.ownerMentionCount.toString());
+                    if (results.mostUsedWord && results.mostUsedWord.length) {
+                        embed.addField("Most Used Word", `${results.mostUsedWord[0]} - used ${results.mostUsedWord[1]} times`);
+                    }
                     if (mentionedUser) {
                         embed.setThumbnail(mentionedUser.displayAvatarURL());
                     }
