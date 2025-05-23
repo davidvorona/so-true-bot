@@ -108,4 +108,8 @@ export default class PGStorageClient {
         return result.rows;
     }
 
+    async fetchChannelMessages(channelId: Snowflake, limit = 10): Promise<{ user_id: string, content: string, attachment_count: number, embed_count: number, created_at: Date }[]> {
+        const result = await this.client.query<{ user_id: string, content: string, attachment_count: number, embed_count: number, created_at: Date }>("SELECT user_id, content, attachment_count, embed_count, created_at FROM messages WHERE channel_id = $1 ORDER BY created_at DESC LIMIT $2;", [channelId, limit]);
+        return result.rows;
+    }
 }

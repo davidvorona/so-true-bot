@@ -1,4 +1,4 @@
-import { Client, Intents, Interaction, GuildMember, MessageEmbed, User } from "discord.js";
+import { Client, Intents, Interaction, GuildMember, MessageEmbed, User, DMChannel, PartialGroupDMChannel, GuildChannel } from "discord.js";
 import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/v9";
 import { AuthJson, ConfigJson } from "./types";
@@ -171,16 +171,39 @@ client.on("messageCreate", async (message) => {
                         .addField("Embed Count", results.embedCount.toString(), true)
                         .addField("Message Count", results.messageCount.toString(), true)
                         .addField("Earliest Message Date", results.earliestMessageDate.toString())
-                        .addField("Most Messaged Channel", `${results.mostMessagedChannel[0]} - ${results.mostMessagedChannel[1]} total messages`)
                         .addField("Owner Mention Count", results.ownerMentionCount.toString());
                     if (results.mostUsedWord && results.mostUsedWord.length) {
                         embed.addField("Most Used Word", `${results.mostUsedWord[0]} - used ${results.mostUsedWord[1]} times`);
+                    }
+                    if (results.mostMessagedChannel && results.mostMessagedChannel.length) {
+                        embed.addField("Most Messaged Channel", `${results.mostMessagedChannel[0]} - ${results.mostMessagedChannel[1]} total messages`);
                     }
                     if (mentionedUser) {
                         embed.setThumbnail(mentionedUser.displayAvatarURL());
                     }
                     await message.reply({
                         embeds: [embed]
+                    });
+                }
+                if (message.content.includes("dsa_channel")) {
+                    const commandArgs = message.content.split("dsa_channel_name")[1].trim();
+                    const channelName = commandArgs.split(" ")[0];
+                    const guildId = commandArgs.split(" ")[1];
+                    let channel;
+                    if (!guildId || guildId === message.guildId) {
+                        channel = message.guild?.channels.cache.find(c => c.name === channelName);
+                    } else {
+                        // @ts-ignore
+                        channel = client.channels.cache.find(c => c.name === channelName && c.guildId === guildId);
+                    } 
+                    if (!channel) {
+                        await message.reply("Channel not found");
+                        return;
+                    }
+                    const data = await discordHistoricalSociety.fetchChannelMessages(channel?.id);
+                    const results = discordSecurityAgency.prepareChannelMessageData(data);
+                    await message.reply({
+                        content: JSON.stringify(data)
                     });
                 }
             }
