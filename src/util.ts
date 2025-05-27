@@ -39,16 +39,18 @@ export const rand = (max: number) => Math.floor(Math.random() * Math.floor(max))
 /**
  * Gets a channel from a Discord container by its ID or name.
  */
-export const getChannel = (container: Guild | Client | GuildMember | Message, channelIdentifier: Snowflake | string): AnyChannel | void => {
+export const getChannel = (container: Guild | Client | GuildMember | Message, channelIdentifier: Snowflake | string, guildId?: Snowflake): AnyChannel | void => {
     try {
         SnowflakeUtil.deconstruct(channelIdentifier); // Validate the channel ID
     } catch (err) {
         const channelName: string = channelIdentifier;
         if (container instanceof GuildMember || container instanceof Message) {
             return container.guild?.channels.cache.find(c => c.name === channelName);
+        } else if (guildId) {
+            // @ts-expect-error There is no reasonable way to narrow the Channel type here
+            return container.channels.cache.find(c => c.name === channelName && c.guildId === guildId);
         }
-        // @ts-expect-error There is no reasonable way to narrow the Channel type here
-        return container.channels.cache.find(c => c.name === channelName && c.guildId === guildId);
+        return;
     }
     const channelId = channelIdentifier;
     if (container instanceof GuildMember || container instanceof Message) {

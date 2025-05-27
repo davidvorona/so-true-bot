@@ -187,8 +187,8 @@ client.on("messageCreate", async (message) => {
                 }
                 if (message.content.includes("dsa_channel")) {
                     const commandArgs = message.content.split("dsa_channel")[1].trim();
-                    const channelIdentifier = commandArgs.split(" ")[0];
-                    const channel = (getChannel(message, channelIdentifier) || getChannel(client, channelIdentifier)) as GuildChannel;
+                    const [channelIdentifier, guildId] = commandArgs.split(" ")[0];
+                    const channel = (getChannel(message, channelIdentifier) || getChannel(client, channelIdentifier, guildId)) as GuildChannel;
                     if (!channel) {
                         await message.reply("Channel not found");
                         return;
