@@ -188,12 +188,12 @@ client.on("messageCreate", async (message) => {
                 if (message.content.includes("dsa_channel")) {
                     const commandArgs = message.content.split("dsa_channel")[1].trim();
                     const channelIdentifier = commandArgs.split(" ")[0];
-                    const cachedChannel = (getChannel(message, channelIdentifier) || getChannel(client, channelIdentifier));
-                    if (!cachedChannel) {
+                    const channel = (getChannel(message, channelIdentifier) || getChannel(client, channelIdentifier)) as GuildChannel;
+                    if (!channel) {
                         await message.reply("Channel not found");
                         return;
                     }
-                    const data = await discordHistoricalSociety.fetchChannelMessages(cachedChannel.id);
+                    const data = await discordHistoricalSociety.fetchChannelMessages(channel.id);
                     const results = discordSecurityAgency.prepareChannelMessageData(data);
                     const latestMessages = await Promise.all(data.slice(0, 10).map(async (message) => {
                         const userUsername = await discordHistoricalSociety.getUserUsername(message.userId);
@@ -202,8 +202,7 @@ client.on("messageCreate", async (message) => {
                             ...message
                         };
                     }));
-                    // Ensure the latest channel data is fetched
-                    const channel = await client.channels.fetch(cachedChannel.id) as GuildChannel;
+                    await channel.guild.members.fetch(); // Ensure all members are fetched
                     const embed = new MessageEmbed()
                         .setTitle(`DSA Channel Report: ${channel.name}`)
                         .setDescription(`Data recorded since ${results.earliestMessageDate.toDateString()}`)
