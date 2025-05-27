@@ -1,8 +1,8 @@
-import { Client, Intents, Interaction, GuildMember, MessageEmbed, User, DMChannel, PartialGroupDMChannel, GuildChannel } from "discord.js";
+import { Client, Intents, Interaction, GuildMember, MessageEmbed, User, GuildChannel } from "discord.js";
 import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/v9";
 import { AuthJson, ConfigJson } from "./types";
-import { readFile, parseJson, rand } from "./util";
+import { readFile, parseJson, rand, getChannel } from "./util";
 import { DEFAULT_EMOJI_NAME, SO_TRUE_CMD } from "./constants";
 import pgStorageClient from "./instances/pg";
 import state from "./instances/state";
@@ -182,28 +182,44 @@ client.on("messageCreate", async (message) => {
                         embed.setThumbnail(mentionedUser.displayAvatarURL());
                     }
                     await message.reply({
-                        embeds: [embed]
+                        embeds: [embed],
                     });
                 }
                 if (message.content.includes("dsa_channel")) {
-                    const commandArgs = message.content.split("dsa_channel_name")[1].trim();
-                    const channelName = commandArgs.split(" ")[0];
-                    const guildId = commandArgs.split(" ")[1];
-                    let channel;
-                    if (!guildId || guildId === message.guildId) {
-                        channel = message.guild?.channels.cache.find(c => c.name === channelName);
-                    } else {
-                        // @ts-ignore
-                        channel = client.channels.cache.find(c => c.name === channelName && c.guildId === guildId);
-                    } 
-                    if (!channel) {
+                    const commandArgs = message.content.split("dsa_channel")[1].trim();
+                    const channelIdentifier = commandArgs.split(" ")[0];
+                    const cachedChannel = (getChannel(message, channelIdentifier) || getChannel(client, channelIdentifier));
+                    if (!cachedChannel) {
                         await message.reply("Channel not found");
                         return;
                     }
-                    const data = await discordHistoricalSociety.fetchChannelMessages(channel?.id);
+                    const data = await discordHistoricalSociety.fetchChannelMessages(cachedChannel.id);
                     const results = discordSecurityAgency.prepareChannelMessageData(data);
+                    const latestMessages = await Promise.all(data.slice(0, 10).map(async (message) => {
+                        const userUsername = await discordHistoricalSociety.getUserUsername(message.userId);
+                        return {
+                            username: userUsername || "Unknown User",
+                            ...message
+                        };
+                    }));
+                    // Ensure the latest channel data is fetched
+                    const channel = await client.channels.fetch(cachedChannel.id) as GuildChannel;
+                    const embed = new MessageEmbed()
+                        .setTitle(`DSA Channel Report: ${channel.name}`)
+                        .setDescription(`Data recorded since ${results.earliestMessageDate.toDateString()}`)
+                        .addField("Attachment Count", results.attachmentCount.toString(), true)
+                        .addField("Embed Count", results.embedCount.toString(), true)
+                        .addField("Message Count", results.messageCount.toString(), true)
+                        .addField("Earliest Message Date", results.earliestMessageDate.toString())
+                        .addField("Owner Mention Count", results.ownerMentionCount.toString())
+                        .addField(`Members (${channel.members.size})`, channel.members.map(m => m.displayName).join(", ") || "No members")
+                        .addField("Last 10 Messages:", "--")
+                        .addFields(latestMessages.map(m => ({
+                            name: `${m.username} at ${new Date(m.createdAt).toLocaleString()}:`,
+                            value: `${m.content} *(${m.attachmentCount} attachments, ${m.embedCount} embeds)*`.slice(0, 1024),
+                        })));
                     await message.reply({
-                        content: JSON.stringify(data)
+                        embeds: [embed]
                     });
                 }
             }

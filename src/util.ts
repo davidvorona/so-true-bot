@@ -1,4 +1,4 @@
-import { Client, AnyChannel, Guild, GuildMember } from "discord.js";
+import { Client, AnyChannel, Guild, GuildMember, SnowflakeUtil, Snowflake, Message } from "discord.js";
 import * as fs from "fs";
 import path from "path";
 
@@ -37,15 +37,22 @@ export const parseJson = (dataJson: string): any => {
 export const rand = (max: number) => Math.floor(Math.random() * Math.floor(max));
 
 /**
- * Gets a channel from a Discord container by its ID.
- * 
- * @param {Guild|Client|GuildMember} container 
- * @param {string} channelId 
- * @returns {AnyChannel}
+ * Gets a channel from a Discord container by its ID or name.
  */
-export const getChannel = (container: Guild | Client | GuildMember, channelId: string): AnyChannel | void => {
-    if (container instanceof GuildMember) {
-        return container.guild.channels.cache.get(channelId);
+export const getChannel = (container: Guild | Client | GuildMember | Message, channelIdentifier: Snowflake | string): AnyChannel | void => {
+    try {
+        SnowflakeUtil.deconstruct(channelIdentifier); // Validate the channel ID
+    } catch (err) {
+        const channelName: string = channelIdentifier;
+        if (container instanceof GuildMember || container instanceof Message) {
+            return container.guild?.channels.cache.find(c => c.name === channelName);
+        }
+        // @ts-expect-error There is no reasonable way to narrow the Channel type here
+        return container.channels.cache.find(c => c.name === channelName && c.guildId === guildId);
+    }
+    const channelId = channelIdentifier;
+    if (container instanceof GuildMember || container instanceof Message) {
+        return container.guild?.channels.cache.get(channelId);
     }
     return container.channels.cache.get(channelId);
 };
